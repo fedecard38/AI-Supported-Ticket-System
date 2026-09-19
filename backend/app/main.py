@@ -5,6 +5,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.setup import router as setup_router
+from app.api.tickets import router as tickets_router
+from app.api.users import router as users_router
+from app.core.database import init_db
 from app.core.setup import setup_manager
 from app.middleware.setup_middleware import SetupMiddleware
 
@@ -17,6 +20,10 @@ async def lifespan(app: FastAPI):
     active = setup_manager.check_setup_state()
     if active:
         logger.info(f"Container started: Setup state is ACTIVE ({setup_manager.config_file_path}).")
+        try:
+            init_db()
+        except Exception as exc:
+            logger.warning(f"Database table initialization deferred: {exc}")
     else:
         logger.warning(
             f"Container started: System uninitialized. setup_state.json absent at {setup_manager.config_file_path}. "
@@ -49,8 +56,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register Setup router
+# Register API routers
 app.include_router(setup_router)
+app.include_router(users_router)
+app.include_router(tickets_router)
 
 
 @app.get("/")

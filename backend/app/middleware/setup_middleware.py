@@ -40,4 +40,18 @@ class SetupMiddleware(BaseHTTPMiddleware):
                     content={"setup_required": True},
                 )
 
+        # Normalize non-UTF8 JSON payload encodings (e.g. Windows PowerShell 5.1 ANSI/Latin-1 default)
+        content_type = request.headers.get("content-type", "")
+        if "application/json" in content_type and request.method in ("POST", "PUT", "PATCH"):
+            raw_body = await request.body()
+            if raw_body:
+                try:
+                    raw_body.decode("utf-8")
+                except UnicodeDecodeError:
+                    try:
+                        fixed_body = raw_body.decode("latin-1").encode("utf-8")
+                        request._body = fixed_body
+                    except Exception:
+                        pass
+
         return await call_next(request)
