@@ -53,6 +53,72 @@ def verify_password(password: str, hashed_password: str) -> bool:
         return False
 
 
+def update_env_file(key: str, value: str) -> None:
+    """Safely update or add an environment key in .env file if it exists, or create/update at target."""
+    candidates = [
+        Path("/app/.env"),
+        Path(".env"),
+        Path(__file__).resolve().parent.parent.parent.parent / ".env",
+        Path(__file__).resolve().parent.parent.parent / ".env",
+    ]
+    target_path = None
+    for env_path in candidates:
+        if env_path.is_file():
+            target_path = env_path
+            break
+
+    if target_path is None:
+        target_path = Path("/app/.env") if Path("/app").is_dir() else Path(".env")
+
+    try:
+        lines = target_path.read_text(encoding="utf-8").splitlines() if target_path.is_file() else []
+        key_found = False
+        new_lines = []
+        for line in lines:
+            if line.startswith(f"{key}=") or line.strip() == key:
+                new_lines.append(f"{key}={value}")
+                key_found = True
+            else:
+                new_lines.append(line)
+        if not key_found:
+            new_lines.append(f"{key}={value}")
+        target_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+        logger.info(f"Updated {key} in {target_path}")
+    except Exception as exc:
+        logger.warning(f"Could not update {key} in {target_path}: {exc}")
+
+
+def get_gemini_api_key() -> Optional[str]:
+    """Retrieve Gemini API key from environment, setup state, or .env file."""
+    # 1. Direct environment variable
+    env_val = os.getenv("GEMINI_API_KEY")
+    if env_val and env_val.strip():
+        return env_val.strip()
+
+    # 2. Setup manager cached state
+    if "setup_manager" in globals() and setup_manager._state_data:
+        saved_key = setup_manager._state_data.get("gemini_api_key")
+        if saved_key and saved_key.strip():
+            return saved_key.strip()
+
+    # 3. Read from .env file
+    try:
+        from dotenv import dotenv_values
+        for candidate in [
+            Path(".env"),
+            Path(__file__).resolve().parent.parent.parent.parent / ".env",
+            Path(__file__).resolve().parent.parent.parent / ".env",
+            Path("/app/.env"),
+        ]:
+            if candidate.is_file():
+                vals = dotenv_values(candidate)
+                if vals.get("GEMINI_API_KEY") and vals["GEMINI_API_KEY"].strip():
+                    return vals["GEMINI_API_KEY"].strip()
+    except Exception:
+        pass
+    return None
+
+
 class SetupManager:
     """
     Manages first-time setup state, configuration persistence, and factory reset.
@@ -106,6 +172,8 @@ class SetupManager:
             if data.get("status") == "ACTIVE":
                 self._is_active = True
                 self._state_data = data
+                if data.get("gemini_api_key"):
+                    os.environ.setdefault("GEMINI_API_KEY", data["gemini_api_key"])
                 logger.info("System setup is ACTIVE.")
                 return True
             else:
@@ -123,20 +191,27 @@ class SetupManager:
         """Check if the system setup is currently ACTIVE."""
         return self._is_active
 
+    def get_gemini_api_key(self) -> Optional[str]:
+        """Retrieve the Gemini API key from environment, setup state, or .env file."""
+        return get_gemini_api_key()
+
     def get_state_summary(self) -> Dict[str, Any]:
         """Return safe summary of the setup state without exposing credentials."""
+        gemini_configured = bool(get_gemini_api_key())
         if not self._is_active or not self._state_data:
             return {
                 "setup_required": True,
                 "status": "UNINITIALIZED",
                 "owner_email": None,
                 "initialized_at": None,
+                "gemini_api_key_configured": gemini_configured,
             }
         return {
             "setup_required": False,
             "status": "ACTIVE",
             "owner_email": self._state_data.get("owner_email"),
             "initialized_at": self._state_data.get("initialized_at"),
+            "gemini_api_key_configured": gemini_configured,
         }
 
     async def validate_gemini_api_key(self, api_key: str, validate_external: bool = True) -> bool:
@@ -238,6 +313,8 @@ class SetupManager:
         # 6. Update internal active state
         self._is_active = True
         self._state_data = config_data
+        os.environ["GEMINI_API_KEY"] = req.gemini_api_key
+        update_env_file("GEMINI_API_KEY", req.gemini_api_key)
         logger.info(f"Setup successfully completed for owner {req.owner_email}.")
 
         # 7. Initialize database tables

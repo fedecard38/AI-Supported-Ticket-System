@@ -30,8 +30,11 @@ services:
       ENVIRONMENT: ${ENVIRONMENT:-development}
       SMTP_HOST: maildev
       SMTP_PORT: 1025
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-flash-latest}
     volumes:
       - ./backend:/app
+      - ./.env:/app/.env
     depends_on:
       postgres:
         condition: service_healthy

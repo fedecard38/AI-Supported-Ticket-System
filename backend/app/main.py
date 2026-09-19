@@ -8,7 +8,7 @@ from app.api.setup import router as setup_router
 from app.api.tickets import router as tickets_router
 from app.api.users import router as users_router
 from app.core.database import init_db
-from app.core.setup import setup_manager
+from app.core.setup import get_gemini_api_key, setup_manager
 from app.middleware.setup_middleware import SetupMiddleware
 
 logger = logging.getLogger("main")
@@ -74,13 +74,19 @@ def read_root():
 
 @app.get("/health")
 def health_check():
+    gemini_key = get_gemini_api_key()
     return {
         "status": "ok",
+        "setup_required": not setup_manager.is_active(),
         "database": {
             "configured": bool(os.getenv("DATABASE_URL")),
         },
         "maildev": {
             "host": os.getenv("SMTP_HOST", "maildev"),
             "port": int(os.getenv("SMTP_PORT", 1025)),
+        },
+        "ai": {
+            "configured": bool(gemini_key),
+            "model": os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
         },
     }
