@@ -240,6 +240,13 @@ class SetupManager:
         self._state_data = config_data
         logger.info(f"Setup successfully completed for owner {req.owner_email}.")
 
+        # 7. Initialize database tables
+        try:
+            from app.core.database import init_db
+            init_db()
+        except Exception as exc:
+            logger.warning(f"Could not immediately initialize database tables: {exc}")
+
         return {
             "message": "System setup successfully initialized.",
             "status": "ACTIVE",
@@ -258,6 +265,14 @@ class SetupManager:
         stored_hash = self._state_data.get("owner_password_hash")
         if not stored_hash or not verify_password(owner_password, stored_hash):
             raise PermissionError("Invalid Owner master password.")
+
+        if wipe_database:
+            try:
+                from app.core.database import Base, engine
+                Base.metadata.drop_all(bind=engine)
+                logger.info("Database tables dropped during factory reset.")
+            except Exception as exc:
+                logger.warning(f"Could not drop database tables during factory reset: {exc}")
 
         target_path = self.config_file_path
         try:
