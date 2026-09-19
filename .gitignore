@@ -448,6 +448,19 @@ venv/
 ENV/
 .pytest_cache/
 
-# Environment
+# Environment and secrets
 .env
+.env.*
+.env.local
+*.env
 !.env.example
+
+# Application runtime configuration and state (User data / credentials)
+**/config/setup_state.json
+**/config/*.json
+setup_state.json
+backend/config/
+/config/
+app/config/
+*.config.json
+
