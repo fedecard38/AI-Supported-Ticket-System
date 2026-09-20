@@ -11,6 +11,10 @@ from app.core.database import init_db
 from app.core.setup import get_gemini_api_key, setup_manager
 from app.middleware.setup_middleware import SetupMiddleware
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 logger = logging.getLogger("main")
 
 

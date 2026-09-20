@@ -16,9 +16,12 @@ from app.models.ticket import Ticket
 from app.models.user import User
 from app.schemas.ticket import TicketCreate
 from app.services.notification import (
+    build_comment_notification_html,
+    build_comment_notification_text,
     build_ticket_notification_html,
     build_ticket_notification_text,
     get_responsible_users_for_category,
+    send_comment_notification,
     send_email,
     send_ticket_creation_notification,
 )
@@ -312,3 +315,141 @@ def test_smtp_failure_resilience():
             port=1025,
         )
         assert success is False
+
+
+def test_build_comment_notification_html_and_text():
+    """Verify comment notification HTML and text include ticket title, status, and comment content."""
+    ticket_id = 45
+    ticket_title = "Billing Issue on Subscription"
+    ticket_status = "In Progress"
+    comment_content = "We have refunded the excess transaction to your original credit card."
+    author_role = "Responsible"
+
+    html_body = build_comment_notification_html(
+        ticket_id=ticket_id,
+        ticket_title=ticket_title,
+        ticket_status=ticket_status,
+        comment_content=comment_content,
+        author_role=author_role,
+    )
+    assert f"#{ticket_id}" in html_body
+    assert ticket_title in html_body
+    assert ticket_status in html_body
+    assert comment_content in html_body
+    assert author_role in html_body
+
+    text_body = build_comment_notification_text(
+        ticket_id=ticket_id,
+        ticket_title=ticket_title,
+        ticket_status=ticket_status,
+        comment_content=comment_content,
+        author_role=author_role,
+    )
+    assert f"#{ticket_id}" in text_body
+    assert ticket_title in text_body
+    assert ticket_status in text_body
+    assert comment_content in text_body
+
+
+def test_send_comment_notification_worker():
+    """Verify send_comment_notification sends to consumer_email when not internal, and skips when internal."""
+    mock_server = MagicMock()
+    mock_smtp_cls = MagicMock(return_value=mock_server)
+    mock_server.__enter__.return_value = mock_server
+
+    with patch("smtplib.SMTP", mock_smtp_cls):
+        # 1. Public comment should dispatch email to consumer
+        sent = send_comment_notification(
+            ticket_id=50,
+            consumer_email="consumer@example.com",
+            ticket_title="Laptop Battery Swelling",
+            ticket_status="In Progress",
+            comment_content="Replacement battery has been shipped to your office.",
+            author_role="Responsible",
+            is_internal=False,
+            host="localhost",
+            port=1025,
+        )
+        assert sent is True
+        assert mock_server.sendmail.call_count == 1
+        args = mock_server.sendmail.call_args[0]
+        assert args[1] == ["consumer@example.com"]
+        assert "Laptop Battery Swelling" in args[2]
+
+        # 2. Comment with is_internal=True also successfully delivers notification to consumer_email
+        mock_server.reset_mock()
+        sent_internal = send_comment_notification(
+            ticket_id=50,
+            consumer_email="consumer@example.com",
+            ticket_title="Laptop Battery Swelling",
+            ticket_status="In Progress",
+            comment_content="Internal note: RMA authorization code is 99823.",
+            author_role="Responsible",
+            is_internal=True,
+            host="localhost",
+            port=1025,
+        )
+        assert sent_internal is True
+        assert mock_server.sendmail.call_count == 1
+
+        # 3. No consumer email should skip cleanly
+        sent_no_email = send_comment_notification(
+            ticket_id=50,
+            consumer_email=None,
+            ticket_title="Laptop Battery Swelling",
+            ticket_status="In Progress",
+            comment_content="Public comment",
+            is_internal=False,
+        )
+        assert sent_no_email is False
+
+
+def test_add_comment_endpoint_dispatches_consumer_notification(active_setup, db_session):
+    """Verify POST /api/tickets/{id}/comments enqueues send_comment_notification for consumer."""
+    def override_get_db():
+        try:
+            yield db_session
+        finally:
+            pass
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    # Create ticket with consumer_email
+    ticket = Ticket(
+        title="Payment Gateway Timeout",
+        description="Checkout error on step 3",
+        category=TicketCategory.FINANCE,
+        priority=TicketPriority.HIGH,
+        status=TicketStatus.OPEN,
+        consumer_name="Alice Customer",
+        consumer_email="alice.customer@example.com",
+    )
+    db_session.add(ticket)
+    db_session.commit()
+    db_session.refresh(ticket)
+
+    comment_payload = {
+        "author_role": "Responsible",
+        "content": "Transaction logs analyzed. Gateway retry initiated.",
+        "is_internal": False,
+    }
+
+    with patch("app.api.tickets.send_comment_notification") as mock_comment_task:
+        with TestClient(app) as client:
+            resp = client.post(f"/api/tickets/{ticket.id}/comments", json=comment_payload)
+            assert resp.status_code == 201
+            data = resp.json()
+            assert data["content"] == "Transaction logs analyzed. Gateway retry initiated."
+
+            mock_comment_task.assert_called_once_with(
+                ticket_id=ticket.id,
+                consumer_email="alice.customer@example.com",
+                ticket_title="Payment Gateway Timeout",
+                ticket_status="Open",
+                comment_content="Transaction logs analyzed. Gateway retry initiated.",
+                author_role="Responsible",
+                is_internal=False,
+            )
+
+    app.dependency_overrides.clear()
+

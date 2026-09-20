@@ -59,6 +59,7 @@ class Ticket(Base, TimestampMixin):
 
     # Requester / Consumer Info
     consumer_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    consumer_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     # AI Enhancement fields
     ai_classification: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

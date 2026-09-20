@@ -336,3 +336,212 @@ def send_ticket_creation_notification(
     finally:
         if should_close_session and session is not None:
             session.close()
+
+
+def build_comment_notification_html(
+    ticket_id: int,
+    ticket_title: str,
+    ticket_status: str,
+    comment_content: str,
+    author_role: Optional[str] = None,
+) -> str:
+    """
+    Generate an HTML notification email sent to the consumer when a comment is posted.
+    Includes Ticket ID, Ticket Title, Ticket Status, and Comment Content.
+    """
+    safe_ticket_id = html.escape(str(ticket_id))
+    safe_title = html.escape(ticket_title or f"Ticket #{ticket_id}")
+    safe_status = html.escape(ticket_status or "Open")
+    safe_comment = html.escape(comment_content or "")
+    safe_author = html.escape(author_role or "Support Team")
+
+    # Status badge styling
+    s_lower = safe_status.lower()
+    if "resolved" in s_lower or "closed" in s_lower:
+        badge_bg = "#dcfce7"
+        badge_color = "#15803d"
+        badge_border = "#86efac"
+    elif "progress" in s_lower:
+        badge_bg = "#fef3c7"
+        badge_color = "#b45309"
+        badge_border = "#fcd34d"
+    else:
+        badge_bg = "#e0f2fe"
+        badge_color = "#0369a1"
+        badge_border = "#bae6fd"
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>New Comment on Ticket #{safe_ticket_id}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f8fafc;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #0f172a; padding: 32px 16px;">
+    <tr>
+      <td align="center">
+        <table width="600" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #1e293b; border-radius: 12px; border: 1px solid #334155; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 24px 32px; background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-bottom: 1px solid #334155;">
+              <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td>
+                    <span style="display: inline-block; font-size: 12px; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 1px;">AI-Supported Ticket System</span>
+                    <h1 style="margin: 6px 0 0 0; font-size: 20px; font-weight: 700; color: #f8fafc;">Update on Ticket #{safe_ticket_id}</h1>
+                  </td>
+                  <td align="right" valign="top">
+                    <span style="display: inline-block; padding: 4px 10px; font-size: 12px; font-weight: 600; border-radius: 6px; background-color: {badge_bg}; color: {badge_color}; border: 1px solid {badge_border};">
+                      {safe_status}
+                    </span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Core Details Body -->
+          <tr>
+            <td style="padding: 32px;">
+              <p style="margin: 0 0 20px 0; font-size: 14px; color: #94a3b8; line-height: 1.5;">
+                A new comment has been posted regarding your ticket:
+              </p>
+
+              <!-- Metadata Table -->
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 24px; background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; padding: 16px;">
+                <tr>
+                  <td style="padding: 8px 12px; font-size: 13px; color: #94a3b8; width: 140px;"><strong>Ticket ID:</strong></td>
+                  <td style="padding: 8px 12px; font-size: 14px; color: #f8fafc; font-weight: 600;">#{safe_ticket_id}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 12px; font-size: 13px; color: #94a3b8;"><strong>Ticket Title:</strong></td>
+                  <td style="padding: 8px 12px; font-size: 14px; color: #f8fafc; font-weight: 600;">{safe_title}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 12px; font-size: 13px; color: #94a3b8;"><strong>Status:</strong></td>
+                  <td style="padding: 8px 12px; font-size: 14px; color: #38bdf8;">{safe_status}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 12px; font-size: 13px; color: #94a3b8;"><strong>Author:</strong></td>
+                  <td style="padding: 8px 12px; font-size: 14px; color: #f8fafc;">{safe_author}</td>
+                </tr>
+              </table>
+
+              <!-- Comment Card -->
+              <div style="margin-bottom: 24px; background-color: #0f172a; border-left: 4px solid #38bdf8; border-radius: 6px; padding: 18px 20px;">
+                <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: #38bdf8; letter-spacing: 0.5px; margin-bottom: 8px;">
+                  💬 New Comment
+                </div>
+                <div style="font-size: 14px; line-height: 1.6; color: #e2e8f0; white-space: pre-wrap;">{safe_comment}</div>
+              </div>
+
+              <!-- Call to Action Button -->
+              <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td align="center" style="padding-top: 8px;">
+                    <a href="http://localhost:3000" target="_blank" style="display: inline-block; padding: 12px 28px; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; border-radius: 6px; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4);">
+                      View Ticket Online →
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 16px 32px; background-color: #0f172a; border-top: 1px solid #334155; text-align: center; font-size: 12px; color: #64748b;">
+              AI Ticket Workspace • Automated Customer Updates
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+
+def build_comment_notification_text(
+    ticket_id: int,
+    ticket_title: str,
+    ticket_status: str,
+    comment_content: str,
+    author_role: Optional[str] = None,
+) -> str:
+    """Generate a clean plain text fallback for the comment notification email."""
+    return (
+        f"AI-Supported Ticket System - Ticket Update\n"
+        f"===========================================\n"
+        f"New comment on Ticket #{ticket_id}: {ticket_title}\n\n"
+        f"Ticket ID:     #{ticket_id}\n"
+        f"Ticket Title:  {ticket_title}\n"
+        f"Status:        {ticket_status}\n"
+        f"Author:        {author_role or 'Support Team'}\n\n"
+        f"Comment:\n"
+        f"--------\n"
+        f"{comment_content}\n\n"
+        f"View online: http://localhost:3000\n"
+    )
+
+
+def send_comment_notification(
+    ticket_id: int,
+    consumer_email: Optional[str],
+    ticket_title: str,
+    ticket_status: str,
+    comment_content: str,
+    author_role: Optional[str] = None,
+    is_internal: bool = False,
+    host: Optional[str] = None,
+    port: Optional[int] = None,
+) -> bool:
+    """
+    Background task worker invoked when a comment is added to a ticket.
+    If the ticket has a consumer_email, dispatches an HTML notification email
+    with Ticket ID, Title, Status, and Comment Content.
+    """
+    if not consumer_email:
+        logger.warning(
+            f"[BackgroundTask] No consumer_email registered for Ticket #{ticket_id}. "
+            f"Comment notification email skipped."
+        )
+        return False
+
+    try:
+        subject = f"New Comment on Ticket #{ticket_id}: [{ticket_status}] {ticket_title}"
+        html_body = build_comment_notification_html(
+            ticket_id=ticket_id,
+            ticket_title=ticket_title,
+            ticket_status=ticket_status,
+            comment_content=comment_content,
+            author_role=author_role,
+        )
+        text_body = build_comment_notification_text(
+            ticket_id=ticket_id,
+            ticket_title=ticket_title,
+            ticket_status=ticket_status,
+            comment_content=comment_content,
+            author_role=author_role,
+        )
+
+        success = send_email(
+            to_email=consumer_email,
+            subject=subject,
+            html_content=html_body,
+            text_content=text_body,
+            host=host,
+            port=port,
+        )
+        if success:
+            logger.info(
+                f"[BackgroundTask] Sent comment notification for Ticket #{ticket_id} to {consumer_email}."
+            )
+        return success
+    except Exception as exc:
+        logger.error(
+            f"[BackgroundTask] Unexpected error in send_comment_notification for Ticket #{ticket_id}: {exc}",
+            exc_info=True,
+        )
+        return False

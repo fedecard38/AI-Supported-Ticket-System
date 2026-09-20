@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.models.enums import TicketCategory, TicketPriority, TicketStatus
 from app.schemas.comment import CommentRead
@@ -27,6 +27,10 @@ class TicketBase(BaseModel):
         max_length=255,
         description="Name of the consumer or user submitting the ticket",
     )
+    consumer_email: Optional[EmailStr] = Field(
+        default=None,
+        description="Optional email address of the consumer to receive ticket updates and comments",
+    )
     ai_summary: Optional[str] = Field(
         default=None,
         description="AI-generated summary of the ticket issue",
@@ -45,6 +49,7 @@ class TicketUpdate(BaseModel):
     status: Optional[TicketStatus] = None
     assignee_id: Optional[int] = None
     consumer_name: Optional[str] = Field(default=None, max_length=255)
+    consumer_email: Optional[EmailStr] = None
     ai_classification: Optional[str] = None
     ai_confidence: Optional[float] = None
     ai_summary: Optional[str] = None
