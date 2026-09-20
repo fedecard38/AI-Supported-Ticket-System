@@ -57,9 +57,14 @@ class Ticket(Base, TimestampMixin):
         index=True,
     )
 
+    # Requester / Consumer Info
+    consumer_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    consumer_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
     # AI Enhancement fields
     ai_classification: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     ai_confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    ai_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Table Indexes (explicit composite index for high-performance dashboard filtering)
     __table_args__ = (

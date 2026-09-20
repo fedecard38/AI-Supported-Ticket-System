@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -11,6 +11,7 @@ from app.models.user import User
 from app.schemas.ai import TicketClassification, TicketTriageRequest
 from app.schemas.comment import CommentCreate, CommentRead
 from app.schemas.ticket import TicketCreate, TicketDetailRead, TicketRead, TicketUpdate
+from app.services.notification import send_comment_notification, send_ticket_creation_notification
 from app.services.triage import aclassify_ticket, classify_ticket
 
 router = APIRouter(prefix="/api/tickets", tags=["Tickets"])
@@ -41,7 +42,11 @@ async def classify_ticket_endpoint(request_in: TicketTriageRequest) -> TicketCla
 
 
 @router.post("", response_model=TicketRead, status_code=status.HTTP_201_CREATED, summary="Create a Ticket")
-def create_ticket(ticket_in: TicketCreate, db: Session = Depends(get_db)) -> TicketRead:
+def create_ticket(
+    ticket_in: TicketCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> TicketRead:
     # Validate assignee exists if provided
     if ticket_in.assignee_id is not None:
         assignee = db.get(User, ticket_in.assignee_id)
@@ -58,10 +63,38 @@ def create_ticket(ticket_in: TicketCreate, db: Session = Depends(get_db)) -> Tic
         priority=ticket_in.priority,
         status=ticket_in.status,
         assignee_id=ticket_in.assignee_id,
+        consumer_name=ticket_in.consumer_name,
+        consumer_email=ticket_in.consumer_email,
+        ai_summary=ticket_in.ai_summary,
     )
     db.add(db_ticket)
     db.commit()
     db.refresh(db_ticket)
+
+    # Dispatch asynchronous non-blocking notification via FastAPI BackgroundTasks
+    # Requirement 1: Lookup all Users where role='responsible' and assigned_category=C
+    # Requirement 2: Send an HTML email via SMTP to localhost:1025 containing Ticket ID, Consumer Name, Priority, and AI Summary
+    # Requirement 3: Non-blocking dispatch ensures consumer receives response instantly
+    category_val = (
+        db_ticket.category.value
+        if hasattr(db_ticket.category, "value")
+        else str(db_ticket.category)
+    )
+    priority_val = (
+        db_ticket.priority.value
+        if hasattr(db_ticket.priority, "value")
+        else str(db_ticket.priority)
+    )
+    background_tasks.add_task(
+        send_ticket_creation_notification,
+        ticket_id=db_ticket.id,
+        category=category_val,
+        consumer_name=db_ticket.consumer_name or "Anonymous Consumer",
+        priority=priority_val,
+        ai_summary=db_ticket.ai_summary or db_ticket.description,
+        ticket_title=db_ticket.title,
+    )
+
     return db_ticket
 
 
@@ -119,7 +152,12 @@ def delete_ticket(ticket_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{ticket_id}/comments", response_model=CommentRead, status_code=status.HTTP_201_CREATED, summary="Add Comment to Ticket")
-def add_comment(ticket_id: int, comment_in: CommentCreate, db: Session = Depends(get_db)) -> CommentRead:
+def add_comment(
+    ticket_id: int,
+    comment_in: CommentCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> CommentRead:
     ticket = db.get(Ticket, ticket_id)
     if not ticket:
         raise HTTPException(
@@ -152,6 +190,29 @@ def add_comment(ticket_id: int, comment_in: CommentCreate, db: Session = Depends
     db.add(db_comment)
     db.commit()
     db.refresh(db_comment)
+
+    # Dispatch asynchronous non-blocking notification to consumer if consumer email is present
+    target_consumer_email = ticket.consumer_email
+    if not target_consumer_email and ticket.creator_id and ticket.creator:
+        target_consumer_email = ticket.creator.email
+
+    if target_consumer_email:
+        status_val = (
+            ticket.status.value
+            if hasattr(ticket.status, "value")
+            else str(ticket.status)
+        )
+        background_tasks.add_task(
+            send_comment_notification,
+            ticket_id=ticket.id,
+            consumer_email=target_consumer_email,
+            ticket_title=ticket.title,
+            ticket_status=status_val,
+            comment_content=db_comment.content,
+            author_role=author_role_str,
+            is_internal=db_comment.is_internal,
+        )
+
     return db_comment
 
 

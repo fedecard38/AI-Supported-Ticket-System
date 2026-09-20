@@ -1,6 +1,6 @@
 # AI-Supported Ticket System
 
-Dockerized AI Ticket Workspace featuring an AI-Supported Ticket Management system, interactive frontend dashboard, FastAPI backend, PostgreSQL 16 database, and local MailDev SMTP testing.
+Dockerized AI Ticket Workspace featuring an AI-Supported Ticket Management system, interactive frontend dashboard, FastAPI backend, PostgreSQL 16 database, local MailDev SMTP testing, and an **Asynchronous Email Notification Service** powered by FastAPI `BackgroundTasks`.
 
 ---
 
@@ -15,24 +15,37 @@ Dockerized AI Ticket Workspace featuring an AI-Supported Ticket Management syste
 
 ---
 
+## Asynchronous Notification Workflow
+
+When a customer or user creates a ticket:
+1. **Instant Ticket Confirmation**: The consumer receives an immediate `HTTP 201 Created` response with their ticket details.
+2. **Non-Blocking Background Tasks**: FastAPI `BackgroundTasks` spawns an asynchronous worker thread that runs independently.
+3. **Targeted Operator Routing**:
+   - For a ticket created with category `C` (e.g. `Finance`, `IT Support`, `Legal`), the system queries all active users where `role='Responsible'` and `assigned_category=C`.
+4. **HTML Email via SMTP**:
+   - The worker constructs a responsive HTML email containing:
+     - **Ticket ID**
+     - **Consumer Name**
+     - **Priority** (High, Medium, Low)
+     - **AI Summary**
+   - The message is transmitted via SMTP to MailDev (`localhost:1025` or `maildev:1025`).
+   - Emails can be inspected immediately in real-time at [http://localhost:1080](http://localhost:1080).
+
+---
+
 ## Quick Start
 
 ### 1. Prerequisites
 - [Docker](https://docs.docker.com/get-docker/) & Docker Compose installed.
 
 ### 2. Environment Setup
-A default `.env` file is included. You can customize variables or duplicate `.env.example`:
+Copy the sample environment variables:
 ```bash
 cp .env.example .env
 ```
 
 ### 3. Launch Services
 Run the entire stack with build:
-```bash
-docker compose up --build
-```
-
-To run in detached (background) mode:
 ```bash
 docker compose up --build -d
 ```
@@ -60,7 +73,10 @@ docker compose down -v
 
 ---
 
-## Development & Hot Reloading
+## Testing & Quality Assurance
 
-- **Backend Hot-Reload:** Edits inside the `backend/` directory immediately trigger Uvicorn reloads inside the container.
-- **Frontend Hot-Reload:** Vite is configured with polling enabled (`usePolling: true`) to ensure file change events trigger fast HMR across cross-platform host volume mounts.
+Run the comprehensive automated test suite (AI Triage, Data Models, Setup & Security, and Notifications):
+```bash
+pytest backend/tests -v
+```
+*(On Windows using virtualenv: `.\backend\.venv\Scripts\python.exe -m pytest backend/tests -v`)*
