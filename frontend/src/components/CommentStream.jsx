@@ -17,9 +17,9 @@ export function CommentStream({
   comments = [],
   onCommentAdded,
   consumerEmail,
+  authorRole = 'Customer', // 'Customer' | 'Responsible' | 'Owner'
 }) {
   const [content, setContent] = useState('');
-  const [authorRole, setAuthorRole] = useState('Responsible');
   const [isInternal, setIsInternal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -158,33 +158,42 @@ export function CommentStream({
         )}
       </div>
 
-      {/* New Comment Form */}
+      {/* New Comment Form - Role is LOCKED to authenticated context, no dropdown */}
       <form
         onSubmit={handleSubmit}
         className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3"
       >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            Add Comment / Reply
-          </span>
+          {/* Identity indication (no role selector) */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              Posting as:
+            </span>
 
-          <div className="flex items-center gap-3">
-            {/* Role picker */}
-            <div className="flex items-center gap-1.5 text-xs text-slate-400">
-              <span>Post as:</span>
-              <select
-                value={authorRole}
-                onChange={(e) => setAuthorRole(e.target.value)}
-                className="px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-700 text-slate-200 text-xs focus:ring-1 focus:ring-blue-500"
-              >
-                <option value="Responsible">Responsible (Category Lead)</option>
-                <option value="Owner">System Owner</option>
-                <option value="Customer">Customer</option>
-                <option value="AI Assistant">AI Assistant</option>
-              </select>
-            </div>
+            {authorRole === 'Responsible' && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-gradient-to-r from-amber-400 to-blue-400 text-slate-950 shadow-sm">
+                <Award className="w-3.5 h-3.5" />
+                <span>Responsible Lead (Official)</span>
+              </span>
+            )}
 
-            {/* Internal note toggle */}
+            {authorRole === 'Owner' && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>System Owner</span>
+              </span>
+            )}
+
+            {authorRole === 'Customer' && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                <User className="w-3.5 h-3.5 text-slate-400" />
+                <span>Customer / Requester</span>
+              </span>
+            )}
+          </div>
+
+          {/* Internal note toggle (only for staff: Responsible or Owner) */}
+          {(authorRole === 'Responsible' || authorRole === 'Owner') && (
             <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -194,10 +203,10 @@ export function CommentStream({
               />
               <span className="flex items-center gap-1">
                 <Lock className="w-3 h-3 text-slate-500" />
-                Internal Note
+                Internal Note (Staff only)
               </span>
             </label>
-          </div>
+          )}
         </div>
 
         {error && (
@@ -212,8 +221,10 @@ export function CommentStream({
           onChange={(e) => setContent(e.target.value)}
           placeholder={
             authorRole === 'Responsible'
-              ? 'Post an official resolution or inquiry response (will feature the prominent Lead badge)...'
-              : 'Type your message or response...'
+              ? 'Post an official resolution or lead message (will feature the prominent Lead badge)...'
+              : authorRole === 'Owner'
+              ? 'Post an administrative comment as System Owner...'
+              : 'Add a message or provide more details regarding your request...'
           }
           className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
         />
@@ -222,7 +233,7 @@ export function CommentStream({
           <p className="text-[11px] text-slate-500">
             {isInternal
               ? 'Internal notes are visible to operators only.'
-              : 'Messages will be dispatched to the consumer and recorded in the ticket history.'}
+              : 'Dispatched to conversation history and email notifications.'}
           </p>
 
           <button

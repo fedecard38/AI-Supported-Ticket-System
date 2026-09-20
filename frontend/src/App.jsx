@@ -80,7 +80,35 @@ export function App() {
   useEffect(() => {
     checkHealth();
     fetchTickets();
+
+    // Check deep-linking query parameters from email notifications
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const viewParam = params.get('view');
+      const ticketParam = params.get('ticket');
+
+      if (viewParam === 'responsible') {
+        setActiveView('responsible');
+      } else if (viewParam === 'owner') {
+        setActiveView('owner');
+      } else if (ticketParam) {
+        const tid = parseInt(ticketParam, 10);
+        if (!isNaN(tid)) {
+          setSelectedTicketId(tid);
+          setActiveView('ticket-detail');
+        }
+      }
+    } catch (e) {
+      console.warn('URL parsing error:', e);
+    }
   }, [checkHealth, fetchTickets]);
+
+  // Ensure dashboard is always refreshed when navigating back to it
+  useEffect(() => {
+    if (activeView === 'dashboard') {
+      fetchTickets();
+    }
+  }, [activeView, fetchTickets]);
 
   const handleSelectTicket = (ticketId) => {
     setSelectedTicketId(ticketId);
@@ -100,6 +128,7 @@ export function App() {
       prev.map((t) => (t.id === updatedTicket.id ? { ...t, ...updatedTicket } : t))
     );
     showToast(`Status updated to ${updatedTicket.status}`, 'info');
+    fetchTickets();
   };
 
   const handleTicketDeleted = (deletedId) => {
@@ -192,6 +221,7 @@ export function App() {
             onBack={() => setActiveView('dashboard')}
             onTicketUpdated={handleTicketUpdated}
             onTicketDeleted={handleTicketDeleted}
+            currentUser={ownerUser || responsibleUser}
           />
         )}
 
@@ -200,6 +230,7 @@ export function App() {
             currentUser={responsibleUser}
             onLogin={handleResponsibleLogin}
             onLogout={handleResponsibleLogout}
+            onTicketUpdated={handleTicketUpdated}
             showToast={showToast}
           />
         )}

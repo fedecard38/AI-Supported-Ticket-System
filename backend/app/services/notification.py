@@ -154,8 +154,8 @@ def build_ticket_notification_html(
               <table width="100%" border="0" cellspacing="0" cellpadding="0">
                 <tr>
                   <td align="center" style="padding-top: 8px;">
-                    <a href="http://localhost:3000" target="_blank" style="display: inline-block; padding: 12px 28px; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; border-radius: 6px; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4);">
-                      View Ticket in Dashboard →
+                    <a href="http://localhost:3000/?view=responsible" target="_blank" style="display: inline-block; padding: 12px 28px; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; border-radius: 6px; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4);">
+                      Access Responsible Portal →
                     </a>
                   </td>
                 </tr>
@@ -199,7 +199,7 @@ def build_ticket_notification_text(
         f"AI Summary:\n"
         f"-----------\n"
         f"{ai_summary or 'No summary available.'}\n\n"
-        f"Access your dashboard at http://localhost:3000\n"
+        f"Access your Responsible Portal at http://localhost:3000/?view=responsible\n"
     )
 
 
@@ -440,8 +440,8 @@ def build_comment_notification_html(
               <table width="100%" border="0" cellspacing="0" cellpadding="0">
                 <tr>
                   <td align="center" style="padding-top: 8px;">
-                    <a href="http://localhost:3000" target="_blank" style="display: inline-block; padding: 12px 28px; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; border-radius: 6px; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4);">
-                      View Ticket Online →
+                    <a href="http://localhost:3000/?ticket={safe_ticket_id}" target="_blank" style="display: inline-block; padding: 12px 28px; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; border-radius: 6px; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4);">
+                      View Ticket #{safe_ticket_id} Details →
                     </a>
                   </td>
                 </tr>
@@ -482,7 +482,7 @@ def build_comment_notification_text(
         f"Comment:\n"
         f"--------\n"
         f"{comment_content}\n\n"
-        f"View online: http://localhost:3000\n"
+        f"View ticket online: http://localhost:3000/?ticket={ticket_id}\n"
     )
 
 

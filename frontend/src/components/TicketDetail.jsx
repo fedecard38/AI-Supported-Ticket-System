@@ -23,6 +23,7 @@ export function TicketDetail({
   onBack,
   onTicketUpdated,
   onTicketDeleted,
+  currentUser,
 }) {
   const [ticket, setTicket] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -220,12 +221,41 @@ export function TicketDetail({
         </div>
       </div>
 
-      {/* Lead Status Switcher (Requirement 4) */}
-      <LeadSwitcher
-        ticketId={ticket.id}
-        currentStatus={ticket.status}
-        onStatusChange={handleStatusChange}
-      />
+      {/* Status Management based on Role */}
+      {currentUser && (currentUser.role === 'Owner' || currentUser.role === 'Responsible') ? (
+        <LeadSwitcher
+          ticketId={ticket.id}
+          currentStatus={ticket.status}
+          onStatusChange={handleStatusChange}
+        />
+      ) : (
+        /* Normal Consumer / User Status Card: Can only change to Resolved */
+        <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              Ticket Status:
+            </span>
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-300 border border-blue-500/20">
+              {ticket.status}
+            </span>
+          </div>
+
+          {ticket.status !== 'Resolved' && ticket.status !== 'Closed' ? (
+            <button
+              onClick={() => handleStatusChange('Resolved')}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/20 transition-all hover:scale-[1.02]"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Mark as Resolved</span>
+            </button>
+          ) : (
+            <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-medium">
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Ticket is {ticket.status}</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Gemini AI Intelligence Card */}
       {ticket.ai_summary && (
@@ -263,12 +293,19 @@ export function TicketDetail({
         </div>
       </div>
 
-      {/* Comment Stream (Requirement 3) */}
+      {/* Comment Stream (Role is locked based on authenticated user) */}
       <CommentStream
         ticketId={ticket.id}
         comments={ticket.comments || []}
         onCommentAdded={handleCommentAdded}
         consumerEmail={ticket.consumer_email}
+        authorRole={
+          currentUser?.role === 'Owner'
+            ? 'Owner'
+            : currentUser?.role === 'Responsible'
+            ? 'Responsible'
+            : 'Customer'
+        }
       />
     </div>
   );

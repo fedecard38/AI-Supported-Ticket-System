@@ -28,6 +28,7 @@ export function ResponsiblePanel({
   currentUser,
   onLogin,
   onLogout,
+  onTicketUpdated,
   showToast,
 }) {
   const [email, setEmail] = useState('');
@@ -97,6 +98,9 @@ export function ResponsiblePanel({
       setTickets((prev) =>
         prev.map((t) => (t.id === updated.id ? { ...t, status: updated.status } : t))
       );
+      if (onTicketUpdated) {
+        onTicketUpdated(updated);
+      }
       showToast?.(`Ticket #${selectedTicket.id} marked as ${newStatus}`, 'info');
     } catch (err) {
       console.error('Status update error:', err);
@@ -444,6 +448,7 @@ export function ResponsiblePanel({
                 comments={selectedTicket.comments || []}
                 onCommentAdded={handleCommentAdded}
                 consumerEmail={selectedTicket.consumer_email}
+                authorRole="Responsible"
               />
             </div>
           ) : (
