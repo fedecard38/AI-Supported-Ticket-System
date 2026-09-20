@@ -35,3 +35,18 @@ class UserRead(UserBase):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class UserLoginRequest(BaseModel):
+    email: EmailStr = Field(..., description="User or Owner email address")
+    password: str = Field(..., min_length=1, description="Account password")
+
+
+class UserLoginResponse(BaseModel):
+    id: Optional[int] = None
+    email: str
+    full_name: Optional[str] = None
+    role: str
+    assigned_category: Optional[str] = None
+    message: str = "Authentication successful"
+

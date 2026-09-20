@@ -56,25 +56,44 @@ def create_ticket(
                 detail=f"Assignee user with ID {ticket_in.assignee_id} not found.",
             )
 
+    category = ticket_in.category
+    priority = ticket_in.priority
+    ai_summary = ticket_in.ai_summary
+
+    # If category or ai_summary is omitted, automatically run AI triage
+    if category is None or ai_summary is None:
+        try:
+            req_text = f"{ticket_in.title}\n{ticket_in.description}"
+            c_name = ticket_in.consumer_name or "Anonymous Consumer"
+            ai_res = classify_ticket(consumer_name=c_name, request_text=req_text)
+            if category is None:
+                category = TicketCategory(ai_res.category)
+            if ai_summary is None:
+                ai_summary = ai_res.summary
+            if ticket_in.priority == TicketPriority.MEDIUM and ai_res.priority:
+                priority = TicketPriority(ai_res.priority)
+        except Exception as exc:
+            if category is None:
+                category = TicketCategory.IT_SUPPORT
+            if ai_summary is None:
+                ai_summary = ticket_in.description[:200]
+
     db_ticket = Ticket(
         title=ticket_in.title,
         description=ticket_in.description,
-        category=ticket_in.category,
-        priority=ticket_in.priority,
+        category=category,
+        priority=priority,
         status=ticket_in.status,
         assignee_id=ticket_in.assignee_id,
         consumer_name=ticket_in.consumer_name,
         consumer_email=ticket_in.consumer_email,
-        ai_summary=ticket_in.ai_summary,
+        ai_summary=ai_summary,
     )
     db.add(db_ticket)
     db.commit()
     db.refresh(db_ticket)
 
     # Dispatch asynchronous non-blocking notification via FastAPI BackgroundTasks
-    # Requirement 1: Lookup all Users where role='responsible' and assigned_category=C
-    # Requirement 2: Send an HTML email via SMTP to localhost:1025 containing Ticket ID, Consumer Name, Priority, and AI Summary
-    # Requirement 3: Non-blocking dispatch ensures consumer receives response instantly
     category_val = (
         db_ticket.category.value
         if hasattr(db_ticket.category, "value")
@@ -96,6 +115,36 @@ def create_ticket(
     )
 
     return db_ticket
+
+
+@router.patch("/{ticket_id}", response_model=TicketRead, summary="Update a Ticket")
+def update_ticket(
+    ticket_id: int,
+    ticket_in: TicketUpdate,
+    db: Session = Depends(get_db),
+) -> TicketRead:
+    ticket = db.get(Ticket, ticket_id)
+    if not ticket:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Ticket with ID {ticket_id} not found.",
+        )
+
+    update_data = ticket_in.model_dump(exclude_unset=True)
+    if "assignee_id" in update_data and update_data["assignee_id"] is not None:
+        assignee = db.get(User, update_data["assignee_id"])
+        if not assignee:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Assignee user with ID {update_data['assignee_id']} not found.",
+            )
+
+    for field, value in update_data.items():
+        setattr(ticket, field, value)
+
+    db.commit()
+    db.refresh(ticket)
+    return ticket
 
 
 @router.get("", response_model=List[TicketRead], summary="List and Filter Tickets")

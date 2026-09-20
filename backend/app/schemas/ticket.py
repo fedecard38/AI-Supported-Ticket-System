@@ -10,8 +10,8 @@ from app.schemas.user import UserRead
 class TicketBase(BaseModel):
     title: str = Field(..., min_length=1, max_length=255, description="Brief summary of ticket issue")
     description: str = Field(..., min_length=1, description="Detailed ticket description")
-    category: TicketCategory = Field(
-        ...,
+    category: Optional[TicketCategory] = Field(
+        default=None,
         description="Department category (Finance, Legal, Operations, IT Support, Human Resources, Customer Success)",
     )
     priority: TicketPriority = Field(
