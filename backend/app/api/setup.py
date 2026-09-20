@@ -7,6 +7,7 @@ from app.schemas.setup import (
     InitializeRequest,
     InitializeResponse,
     SetupStatusResponse,
+    UpdateGeminiKeyRequest,
 )
 
 logger = logging.getLogger("setup_api")
@@ -93,4 +94,41 @@ async def factory_reset_system(req: FactoryResetRequest):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error occurred during factory reset.",
+        )
+
+
+@router.post(
+    "/gemini-key",
+    summary="Update Gemini API Key",
+    description="Update the Google Gemini API Key. Protected by Owner master password.",
+)
+async def update_gemini_api_key(req: UpdateGeminiKeyRequest):
+    if not setup_manager.is_active():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="System is not currently initialized.",
+        )
+
+    try:
+        result = await setup_manager.update_gemini_api_key(
+            owner_password=req.owner_password,
+            new_api_key=req.gemini_api_key,
+            validate_external=req.validate_external,
+        )
+        return result
+    except PermissionError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Owner master password.",
+        )
+    except ValueError as val_err:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(val_err),
+        )
+    except Exception as exc:
+        logger.error(f"Unexpected error updating Gemini key: {exc}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error occurred while updating Gemini API key.",
         )

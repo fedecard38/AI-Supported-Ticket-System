@@ -371,6 +371,38 @@ class SetupManager:
             "status": "UNINITIALIZED",
         }
 
+    async def update_gemini_api_key(
+        self,
+        owner_password: str,
+        new_api_key: str,
+        validate_external: bool = False,
+    ) -> Dict[str, Any]:
+        """Update Gemini API Key in setup state and .env file, protected by Owner password."""
+        if not self._is_active or not self._state_data:
+            raise ValueError("System is not initialized.")
+
+        stored_hash = self._state_data.get("owner_password_hash")
+        if not stored_hash or not verify_password(owner_password, stored_hash):
+            raise PermissionError("Invalid Owner master password.")
+
+        clean_key = new_api_key.strip()
+        if len(clean_key) < 10:
+            raise ValueError("Invalid Gemini API Key format.")
+
+        if validate_external:
+            await self.validate_gemini_api_key(clean_key, validate_external=True)
+
+        self._state_data["gemini_api_key"] = clean_key
+        self._write_config_atomic(self._state_data)
+        update_env_file("GEMINI_API_KEY", clean_key)
+        os.environ["GEMINI_API_KEY"] = clean_key
+
+        logger.info("Gemini API key updated successfully by Owner.")
+        return {
+            "message": "Gemini API key updated successfully.",
+            "gemini_api_key_configured": True,
+        }
+
     def _write_config_atomic(self, data: Dict[str, Any]) -> None:
         """Write configuration to disk atomically with restricted POSIX permissions."""
         target_path = self.config_file_path

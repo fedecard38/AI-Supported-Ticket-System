@@ -47,10 +47,11 @@ export function ConsumerModal({ isOpen, onClose, onTicketCreated }) {
 
     try {
       // 1. Invoke AI Triage method to obtain category, priority, and summary
-      const requestText = `Subject: ${formData.title}\n\nIssue Details:\n${formData.description}`;
       const classification = await api.triageTicket({
         consumer_name: formData.consumer_name.trim(),
-        request_text: requestText,
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        request_text: `Subject: ${formData.title.trim()}\n\nDetailed Description:\n${formData.description.trim()}`,
       });
 
       setTriageResult(classification);

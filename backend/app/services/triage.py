@@ -10,7 +10,7 @@ from app.schemas.ai import TicketClassification
 logger = logging.getLogger("triage_service")
 
 # Default model configuration
-DEFAULT_MODEL = "gemini-flash-latest"
+DEFAULT_MODEL = "gemini-2.5-flash"
 # google-genai treats http_options.timeout as milliseconds: 30000ms = 30 seconds
 DEFAULT_TIMEOUT_MS = 30000
 
@@ -18,17 +18,16 @@ DEFAULT_TIMEOUT_MS = 30000
 def _get_models_to_try() -> List[str]:
     """
     Get ordered list of candidate models with automatic failover.
-    Ensures that deprecated models (e.g. 404 on 2.5-flash) or temporary high-demand
-    server errors (503 on a specific model) fail over gracefully to an active model.
+    Uses official active Google Gemini models.
     """
     configured = os.getenv("GEMINI_MODEL", DEFAULT_MODEL)
-    if not configured or "2.5" in configured:
-        configured = "gemini-flash-latest"
     candidates = [
         configured,
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
         "gemini-flash-latest",
-        "gemini-3.5-flash",
-        "gemini-3.8-flash",
     ]
     # Remove duplicates preserving order
     return list(dict.fromkeys(c for c in candidates if c))
@@ -36,8 +35,10 @@ def _get_models_to_try() -> List[str]:
 
 def fallback_classify_ticket(
     consumer_name: str,
-    request_text: str,
+    request_text: Optional[str] = None,
     attachment_url: Optional[str] = None,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
     reason: str = "network_timeout",
 ) -> TicketClassification:
     """
@@ -49,7 +50,19 @@ def fallback_classify_ticket(
         f"Invoking fallback triage logic for '{consumer_name}' (reason: {reason})."
     )
 
-    text_lower = request_text.lower()
+    full_text = request_text or ""
+    if title and description:
+        full_text = f"Title: {title.strip()}\n\nDetailed Description:\n{description.strip()}"
+        effective_title = title.strip()
+        effective_desc = description.strip()
+    else:
+        title_match = re.search(r"(?:Subject|Title):\s*(.+?)(?:\n\n|\n|$)", full_text, re.IGNORECASE)
+        effective_title = title_match.group(1).strip() if title_match else ""
+        cleaned = re.sub(r"(?i)^(?:Subject|Title):[^\n]*\n*", "", full_text)
+        cleaned = re.sub(r"(?i)^(?:Issue Details|Detailed Description|Problem Description|Description):[^\n]*\n*", "", cleaned).strip()
+        effective_desc = cleaned if len(cleaned) > 5 else full_text
+
+    text_lower = full_text.lower()
 
     # 1. Category heuristics based on bilingual (EN/ES) domain keywords
     category_scores = {
@@ -134,13 +147,22 @@ def fallback_classify_ticket(
     else:
         priority = "Medium"
 
-    # 3. Intelligent fallback summary synthesis
-    sentences = [s.strip() for s in re.split(r"[.!?\n]+", request_text) if len(s.strip()) > 5]
-    if sentences:
-        core_issue = sentences[0]
-        if len(core_issue) > 160:
-            core_issue = core_issue[:157] + "..."
-        candidate_summary = f"{consumer_name} reporta solicitud ({best_category}): {core_issue}."
+    # 3. Intelligent fallback summary synthesis focusing on the detailed problem
+    target_body = effective_desc
+    raw_sentences = [
+        s.strip()
+        for s in re.split(r"(?<=[.!?])\s+|\n+", target_body)
+        if len(s.strip()) > 8 and not re.match(r"^(?:Subject|Title|Issue Details|Description):", s.strip(), re.IGNORECASE)
+    ]
+    if raw_sentences:
+        core_issue = raw_sentences[0].rstrip(".!?")
+        if len(core_issue) < 50 and len(raw_sentences) > 1:
+            core_issue = f"{core_issue}. {raw_sentences[1].rstrip('.!?')}"
+        if len(core_issue) > 180:
+            core_issue = core_issue[:177].rsplit(" ", 1)[0] + "..."
+        candidate_summary = f"{consumer_name} reporta ({best_category}): {core_issue}."
+    elif effective_title:
+        candidate_summary = f"{consumer_name} reporta ({best_category}): {effective_title}."
     else:
         candidate_summary = f"Solicitud de asistencia de {consumer_name} ({best_category})."
 
@@ -151,12 +173,21 @@ def fallback_classify_ticket(
     )
 
 
-def _build_prompt(consumer_name: str, request_text: str, attachment_url: Optional[str]) -> str:
-    prompt = (
-        f"Please analyze and triage this support ticket into one of the designated categories and priorities:\n\n"
-        f"Consumer: {consumer_name}\n"
-        f"Ticket Request Content:\n{request_text}\n"
-    )
+def _build_prompt(
+    consumer_name: str,
+    request_text: Optional[str] = None,
+    attachment_url: Optional[str] = None,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+) -> str:
+    prompt = f"Consumer / Submitter: {consumer_name}\n"
+    if title:
+        prompt += f"Ticket Subject / Title: {title}\n"
+    if description:
+        prompt += f"Detailed Problem Description:\n{description}\n"
+    elif request_text:
+        prompt += f"Ticket Content:\n{request_text}\n"
+
     if attachment_url and attachment_url.strip():
         prompt += f"Attachment URL: {attachment_url.strip()}\n"
     return prompt
@@ -165,14 +196,16 @@ def _build_prompt(consumer_name: str, request_text: str, attachment_url: Optiona
 def _get_system_instruction() -> str:
     return (
         "You are an enterprise AI ticket triaging assistant. "
-        "Your task is to analyze support ticket requests (which can be brief or very long) and:\n"
+        "Your task is to analyze support ticket requests (both title and detailed description) and:\n"
         "1. Categorize it into EXACTLY ONE department: 'Finance', 'Legal', 'Operations', 'IT Support', 'Human Resources', or 'Customer Success'.\n"
         "2. Assign a priority: 'High', 'Medium', or 'Low' based on business urgency and impact:\n"
         "   - 'High': Outages, production down, VPN/login blockers, duplicate billing/charges, security breaches, legal issues, urgent deadlines.\n"
         "   - 'Medium': Standard operational requests, functional bugs, inquiries requiring staff attention, day-to-day tickets.\n"
         "   - 'Low': Minor questions, general feedback, non-blocking inquiries, informational requests.\n"
         "3. Generate a concise, intelligent 1-2 sentence summary of the core issue and what action is required. "
-        "Do NOT simply copy or repeat the input text verbatim; synthesize and summarize the issue clearly in the SAME language as the request (e.g., if the user wrote in Spanish, answer in Spanish; if in English, answer in English).\n"
+        "CRITICAL INSTRUCTION FOR SUMMARY: "
+        "Your summary MUST focus on the user's detailed description of what is failing or requested. "
+        "Do NOT simply repeat or copy the ticket title or subject line. Synthesize the core problem described in the description and state what is needed, written in the SAME language as the request (e.g., if the user wrote in Spanish, answer in Spanish; if in English, answer in English).\n"
         "Always respond with valid structured JSON conforming to the schema."
     )
 
@@ -187,8 +220,10 @@ def _parse_classification(text: str) -> TicketClassification:
 
 def classify_ticket(
     consumer_name: str,
-    request_text: str,
+    request_text: Optional[str] = None,
     attachment_url: Optional[str] = None,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
 ) -> TicketClassification:
     """
     Classify a support ticket using Google GenAI SDK.
@@ -198,9 +233,22 @@ def classify_ticket(
     api_key = get_gemini_api_key()
     if not api_key:
         logger.warning("Gemini API key is not configured. Falling back to rule-based classification.")
-        return fallback_classify_ticket(consumer_name, request_text, attachment_url, reason="missing_api_key")
+        return fallback_classify_ticket(
+            consumer_name=consumer_name,
+            request_text=request_text,
+            attachment_url=attachment_url,
+            title=title,
+            description=description,
+            reason="missing_api_key",
+        )
 
-    prompt = _build_prompt(consumer_name, request_text, attachment_url)
+    prompt = _build_prompt(
+        consumer_name=consumer_name,
+        request_text=request_text,
+        attachment_url=attachment_url,
+        title=title,
+        description=description,
+    )
     models_to_try = _get_models_to_try()
 
     try:
@@ -232,7 +280,6 @@ def classify_ticket(
                     return _parse_classification(response.text)
 
             except Exception as model_err:
-                err_str = str(model_err).lower()
                 logger.warning(f"Model '{model_name}' encountered error: {model_err}. Checking next candidate.")
                 last_error = model_err
                 # Continue loop to try next model in cascade
@@ -240,26 +287,63 @@ def classify_ticket(
         # If all candidate models in the loop failed:
         if last_error:
             logger.error(f"All candidate models failed. Last error: {last_error}")
-            return fallback_classify_ticket(consumer_name, request_text, attachment_url, reason=f"error_{type(last_error).__name__}")
+            return fallback_classify_ticket(
+                consumer_name=consumer_name,
+                request_text=request_text,
+                attachment_url=attachment_url,
+                title=title,
+                description=description,
+                reason=f"error_{type(last_error).__name__}",
+            )
 
-        return fallback_classify_ticket(consumer_name, request_text, attachment_url, reason="empty_response")
+        return fallback_classify_ticket(
+            consumer_name=consumer_name,
+            request_text=request_text,
+            attachment_url=attachment_url,
+            title=title,
+            description=description,
+            reason="empty_response",
+        )
 
     except (httpx.TimeoutException, TimeoutError) as timeout_exc:
         logger.warning(f"Network timeout contacting Gemini API ({timeout_exc}). Triggering fallback logic.")
-        return fallback_classify_ticket(consumer_name, request_text, attachment_url, reason="network_timeout")
+        return fallback_classify_ticket(
+            consumer_name=consumer_name,
+            request_text=request_text,
+            attachment_url=attachment_url,
+            title=title,
+            description=description,
+            reason="network_timeout",
+        )
     except Exception as exc:
         err_msg = str(exc).lower()
         if "timeout" in err_msg or "timed out" in err_msg or "connection" in err_msg:
             logger.warning(f"Connection/timeout issue with Gemini API: {exc}. Triggering fallback logic.")
-            return fallback_classify_ticket(consumer_name, request_text, attachment_url, reason="network_timeout")
+            return fallback_classify_ticket(
+                consumer_name=consumer_name,
+                request_text=request_text,
+                attachment_url=attachment_url,
+                title=title,
+                description=description,
+                reason="network_timeout",
+            )
         logger.error(f"Error occurred during Gemini classification: {exc}", exc_info=True)
-        return fallback_classify_ticket(consumer_name, request_text, attachment_url, reason=f"error_{type(exc).__name__}")
+        return fallback_classify_ticket(
+            consumer_name=consumer_name,
+            request_text=request_text,
+            attachment_url=attachment_url,
+            title=title,
+            description=description,
+            reason=f"error_{type(exc).__name__}",
+        )
 
 
 async def aclassify_ticket(
     consumer_name: str,
-    request_text: str,
+    request_text: Optional[str] = None,
     attachment_url: Optional[str] = None,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
 ) -> TicketClassification:
     """
     Asynchronous version of classify_ticket using Google GenAI async client.
@@ -268,9 +352,22 @@ async def aclassify_ticket(
     api_key = get_gemini_api_key()
     if not api_key:
         logger.warning("Gemini API key is not configured. Falling back to rule-based classification.")
-        return fallback_classify_ticket(consumer_name, request_text, attachment_url, reason="missing_api_key")
+        return fallback_classify_ticket(
+            consumer_name=consumer_name,
+            request_text=request_text,
+            attachment_url=attachment_url,
+            title=title,
+            description=description,
+            reason="missing_api_key",
+        )
 
-    prompt = _build_prompt(consumer_name, request_text, attachment_url)
+    prompt = _build_prompt(
+        consumer_name=consumer_name,
+        request_text=request_text,
+        attachment_url=attachment_url,
+        title=title,
+        description=description,
+    )
     models_to_try = _get_models_to_try()
 
     try:
@@ -309,17 +406,52 @@ async def aclassify_ticket(
         # If all candidate models in the loop failed:
         if last_error:
             logger.error(f"All candidate async models failed. Last error: {last_error}")
-            return fallback_classify_ticket(consumer_name, request_text, attachment_url, reason=f"error_{type(last_error).__name__}")
+            return fallback_classify_ticket(
+                consumer_name=consumer_name,
+                request_text=request_text,
+                attachment_url=attachment_url,
+                title=title,
+                description=description,
+                reason=f"error_{type(last_error).__name__}",
+            )
 
-        return fallback_classify_ticket(consumer_name, request_text, attachment_url, reason="empty_response")
+        return fallback_classify_ticket(
+            consumer_name=consumer_name,
+            request_text=request_text,
+            attachment_url=attachment_url,
+            title=title,
+            description=description,
+            reason="empty_response",
+        )
 
     except (httpx.TimeoutException, TimeoutError) as timeout_exc:
         logger.warning(f"Async network timeout contacting Gemini API ({timeout_exc}). Triggering fallback logic.")
-        return fallback_classify_ticket(consumer_name, request_text, attachment_url, reason="network_timeout")
+        return fallback_classify_ticket(
+            consumer_name=consumer_name,
+            request_text=request_text,
+            attachment_url=attachment_url,
+            title=title,
+            description=description,
+            reason="network_timeout",
+        )
     except Exception as exc:
         err_msg = str(exc).lower()
         if "timeout" in err_msg or "timed out" in err_msg or "connection" in err_msg:
             logger.warning(f"Async connection/timeout issue with Gemini API: {exc}. Triggering fallback logic.")
-            return fallback_classify_ticket(consumer_name, request_text, attachment_url, reason="network_timeout")
+            return fallback_classify_ticket(
+                consumer_name=consumer_name,
+                request_text=request_text,
+                attachment_url=attachment_url,
+                title=title,
+                description=description,
+                reason="network_timeout",
+            )
         logger.error(f"Async error during Gemini classification: {exc}", exc_info=True)
-        return fallback_classify_ticket(consumer_name, request_text, attachment_url, reason=f"error_{type(exc).__name__}")
+        return fallback_classify_ticket(
+            consumer_name=consumer_name,
+            request_text=request_text,
+            attachment_url=attachment_url,
+            title=title,
+            description=description,
+            reason=f"error_{type(exc).__name__}",
+        )
