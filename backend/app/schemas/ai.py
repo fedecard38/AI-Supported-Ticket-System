@@ -37,5 +37,7 @@ class TicketClassification(BaseModel):
 class TicketTriageRequest(BaseModel):
     """Payload for invoking ticket classification via API."""
     consumer_name: str = Field(..., min_length=1, description="Name of the consumer or user submitting the ticket")
-    request_text: str = Field(..., min_length=1, description="Content of the ticket issue or inquiry")
+    request_text: Optional[str] = Field(default=None, description="Combined content of the ticket issue or inquiry")
+    title: Optional[str] = Field(default=None, description="Optional subject/title of the ticket")
+    description: Optional[str] = Field(default=None, description="Detailed problem description")
     attachment_url: Optional[str] = Field(default=None, description="Optional attachment or document URL")

@@ -80,3 +80,9 @@ class InitializeResponse(BaseModel):
     status: str
     owner_email: str
     setup_required: bool = False
+
+
+class UpdateGeminiKeyRequest(BaseModel):
+    owner_password: str = Field(..., min_length=1, description="Owner master password to authorize change")
+    gemini_api_key: str = Field(..., min_length=10, description="New Google Gemini API key")
+    validate_external: bool = Field(default=False, description="Whether to validate key against Google API")

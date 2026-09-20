@@ -28,6 +28,8 @@ async def triage_ticket_endpoint(request_in: TicketTriageRequest) -> TicketClass
         consumer_name=request_in.consumer_name,
         request_text=request_in.request_text,
         attachment_url=request_in.attachment_url,
+        title=request_in.title,
+        description=request_in.description,
     )
 
 
@@ -38,6 +40,8 @@ async def classify_ticket_endpoint(request_in: TicketTriageRequest) -> TicketCla
         consumer_name=request_in.consumer_name,
         request_text=request_in.request_text,
         attachment_url=request_in.attachment_url,
+        title=request_in.title,
+        description=request_in.description,
     )
 
 
@@ -63,9 +67,14 @@ def create_ticket(
     # If category or ai_summary is omitted, automatically run AI triage
     if category is None or ai_summary is None:
         try:
-            req_text = f"{ticket_in.title}\n{ticket_in.description}"
+            req_text = f"Title: {ticket_in.title}\n\nDetailed Description:\n{ticket_in.description}"
             c_name = ticket_in.consumer_name or "Anonymous Consumer"
-            ai_res = classify_ticket(consumer_name=c_name, request_text=req_text)
+            ai_res = classify_ticket(
+                consumer_name=c_name,
+                request_text=req_text,
+                title=ticket_in.title,
+                description=ticket_in.description,
+            )
             if category is None:
                 category = TicketCategory(ai_res.category)
             if ai_summary is None:

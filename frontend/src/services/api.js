@@ -73,6 +73,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+  updateGeminiKey: (payload) =>
+    request('/api/setup/gemini-key', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 
   // Tickets
   listTickets: (params = {}) => {
