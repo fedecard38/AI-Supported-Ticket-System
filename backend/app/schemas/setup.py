@@ -72,6 +72,7 @@ class SetupStatusResponse(BaseModel):
     status: str
     owner_email: Optional[str] = None
     initialized_at: Optional[str] = None
+    gemini_api_key_configured: Optional[bool] = None
 
 
 class InitializeResponse(BaseModel):

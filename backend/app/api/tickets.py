@@ -8,10 +8,36 @@ from app.models.comment import Comment
 from app.models.enums import TicketCategory, TicketPriority, TicketStatus
 from app.models.ticket import Ticket
 from app.models.user import User
+from app.schemas.ai import TicketClassification, TicketTriageRequest
 from app.schemas.comment import CommentCreate, CommentRead
 from app.schemas.ticket import TicketCreate, TicketDetailRead, TicketRead, TicketUpdate
+from app.services.triage import aclassify_ticket, classify_ticket
 
 router = APIRouter(prefix="/api/tickets", tags=["Tickets"])
+
+
+@router.post("/triage", response_model=TicketClassification, summary="AI Triage Ticket")
+async def triage_ticket_endpoint(request_in: TicketTriageRequest) -> TicketClassification:
+    """
+    Classify a support ticket using Gemini AI into database-compatible category and priority,
+    returning structured JSON with category, priority, and summary.
+    Includes network timeout fallback logic.
+    """
+    return await aclassify_ticket(
+        consumer_name=request_in.consumer_name,
+        request_text=request_in.request_text,
+        attachment_url=request_in.attachment_url,
+    )
+
+
+@router.post("/classify", response_model=TicketClassification, summary="AI Classify Ticket (Alias)")
+async def classify_ticket_endpoint(request_in: TicketTriageRequest) -> TicketClassification:
+    """Alias for /triage endpoint."""
+    return await aclassify_ticket(
+        consumer_name=request_in.consumer_name,
+        request_text=request_in.request_text,
+        attachment_url=request_in.attachment_url,
+    )
 
 
 @router.post("", response_model=TicketRead, status_code=status.HTTP_201_CREATED, summary="Create a Ticket")
