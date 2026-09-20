@@ -9,9 +9,43 @@ import SetupModal from './components/SetupModal';
 import Toast from './components/Toast';
 import api from './services/api';
 
+function parseUrlRoute() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const viewParam = params.get('view');
+    const ticketParam = params.get('ticket');
+    const hash = window.location.hash ? window.location.hash.replace(/^#\/?/, '') : '';
+
+    if (viewParam === 'responsible' || hash === 'responsible') {
+      return { view: 'responsible', ticketId: null };
+    }
+    if (viewParam === 'owner' || hash === 'owner') {
+      return { view: 'owner', ticketId: null };
+    }
+    if (ticketParam) {
+      const tid = parseInt(ticketParam, 10);
+      if (!isNaN(tid)) {
+        return { view: 'ticket-detail', ticketId: tid };
+      }
+    }
+    if (hash.startsWith('ticket-')) {
+      const tid = parseInt(hash.replace('ticket-', ''), 10);
+      if (!isNaN(tid)) return { view: 'ticket-detail', ticketId: tid };
+    }
+    if (hash.startsWith('ticket/')) {
+      const tid = parseInt(hash.replace('ticket/', ''), 10);
+      if (!isNaN(tid)) return { view: 'ticket-detail', ticketId: tid };
+    }
+  } catch (err) {
+    console.warn('URL parsing error:', err);
+  }
+  return { view: 'dashboard', ticketId: null };
+}
+
 export function App() {
-  const [activeView, setActiveView] = useState('dashboard'); // 'dashboard' | 'ticket-detail' | 'responsible' | 'owner'
-  const [selectedTicketId, setSelectedTicketId] = useState(null);
+  const initialRoute = parseUrlRoute();
+  const [activeView, setActiveView] = useState(initialRoute.view); // 'dashboard' | 'ticket-detail' | 'responsible' | 'owner'
+  const [selectedTicketId, setSelectedTicketId] = useState(initialRoute.ticketId);
   const [tickets, setTickets] = useState([]);
   const [loadingTickets, setLoadingTickets] = useState(false);
   const [systemHealth, setSystemHealth] = useState(null);
@@ -41,6 +75,26 @@ export function App() {
   const showToast = (message, type = 'info') => {
     setToast({ message, type, id: Date.now() });
   };
+
+  const navigate = useCallback((view, ticketId = null) => {
+    setActiveView(view);
+    setSelectedTicketId(ticketId);
+    try {
+      let newUrl = '/';
+      if (view === 'responsible') {
+        newUrl = '/?view=responsible';
+      } else if (view === 'owner') {
+        newUrl = '/?view=owner';
+      } else if (view === 'ticket-detail' && ticketId) {
+        newUrl = `/?ticket=${ticketId}`;
+      }
+      if (window.location.pathname + window.location.search !== newUrl) {
+        window.history.pushState(null, '', newUrl);
+      }
+    } catch (e) {
+      console.warn('History pushState error:', e);
+    }
+  }, []);
 
   // Check health and setup status
   const checkHealth = useCallback(async () => {
@@ -81,26 +135,19 @@ export function App() {
     checkHealth();
     fetchTickets();
 
-    // Check deep-linking query parameters from email notifications
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const viewParam = params.get('view');
-      const ticketParam = params.get('ticket');
+    const handleLocationChange = () => {
+      const route = parseUrlRoute();
+      setActiveView(route.view);
+      setSelectedTicketId(route.ticketId);
+    };
 
-      if (viewParam === 'responsible') {
-        setActiveView('responsible');
-      } else if (viewParam === 'owner') {
-        setActiveView('owner');
-      } else if (ticketParam) {
-        const tid = parseInt(ticketParam, 10);
-        if (!isNaN(tid)) {
-          setSelectedTicketId(tid);
-          setActiveView('ticket-detail');
-        }
-      }
-    } catch (e) {
-      console.warn('URL parsing error:', e);
-    }
+    window.addEventListener('popstate', handleLocationChange);
+    window.addEventListener('hashchange', handleLocationChange);
+
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+      window.removeEventListener('hashchange', handleLocationChange);
+    };
   }, [checkHealth, fetchTickets]);
 
   // Ensure dashboard is always refreshed when navigating back to it
@@ -111,8 +158,7 @@ export function App() {
   }, [activeView, fetchTickets]);
 
   const handleSelectTicket = (ticketId) => {
-    setSelectedTicketId(ticketId);
-    setActiveView('ticket-detail');
+    navigate('ticket-detail', ticketId);
   };
 
   const handleTicketCreated = (newTicket) => {
@@ -134,6 +180,9 @@ export function App() {
   const handleTicketDeleted = (deletedId) => {
     setTickets((prev) => prev.filter((t) => t.id !== deletedId));
     showToast(`Ticket #${deletedId} deleted`, 'info');
+    if (selectedTicketId === deletedId) {
+      navigate('dashboard');
+    }
   };
 
   const handleOwnerLogin = (user) => {
@@ -179,7 +228,7 @@ export function App() {
     setSelectedTicketId(null);
     handleOwnerLogout();
     handleResponsibleLogout();
-    setActiveView('dashboard');
+    navigate('dashboard');
     setSetupRequired(true);
     showToast('Factory reset successful. System requires setup.', 'warning');
   };
@@ -196,7 +245,7 @@ export function App() {
       {/* Top Navigation */}
       <Header
         activeView={activeView}
-        setActiveView={setActiveView}
+        setActiveView={(v) => navigate(v)}
         onOpenSubmitModal={() => setIsSubmitModalOpen(true)}
         systemHealth={systemHealth}
         responsibleUser={responsibleUser}
@@ -218,7 +267,7 @@ export function App() {
         {activeView === 'ticket-detail' && selectedTicketId && (
           <TicketDetail
             ticketId={selectedTicketId}
-            onBack={() => setActiveView('dashboard')}
+            onBack={() => navigate('dashboard')}
             onTicketUpdated={handleTicketUpdated}
             onTicketDeleted={handleTicketDeleted}
             currentUser={ownerUser || responsibleUser}

@@ -19,6 +19,7 @@ logger = logging.getLogger("notification_service")
 DEFAULT_SMTP_HOST = os.getenv("SMTP_HOST", "localhost")
 DEFAULT_SMTP_PORT = int(os.getenv("SMTP_PORT", 1025))
 DEFAULT_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", "noreply@ticketworkspace.com")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
 
 
 def get_responsible_users_for_category(
@@ -154,8 +155,16 @@ def build_ticket_notification_html(
               <table width="100%" border="0" cellspacing="0" cellpadding="0">
                 <tr>
                   <td align="center" style="padding-top: 8px;">
-                    <a href="http://localhost:3000/?view=responsible" target="_blank" style="display: inline-block; padding: 12px 28px; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; border-radius: 6px; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4);">
+                    <a href="{FRONTEND_URL}/?view=responsible" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 12px 28px; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; border-radius: 6px; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4);">
                       Access Responsible Portal →
+                    </a>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding-top: 14px; font-size: 13px; color: #94a3b8; line-height: 1.5;">
+                    Or open directly in browser:<br/>
+                    <a href="{FRONTEND_URL}/?view=responsible" target="_blank" rel="noopener noreferrer" style="color: #38bdf8; text-decoration: underline; font-weight: 500; word-break: break-all;">
+                      {FRONTEND_URL}/?view=responsible
                     </a>
                   </td>
                 </tr>
@@ -199,7 +208,7 @@ def build_ticket_notification_text(
         f"AI Summary:\n"
         f"-----------\n"
         f"{ai_summary or 'No summary available.'}\n\n"
-        f"Access your Responsible Portal at http://localhost:3000/?view=responsible\n"
+        f"Access your Responsible Portal at {FRONTEND_URL}/?view=responsible\n"
     )
 
 
@@ -440,8 +449,16 @@ def build_comment_notification_html(
               <table width="100%" border="0" cellspacing="0" cellpadding="0">
                 <tr>
                   <td align="center" style="padding-top: 8px;">
-                    <a href="http://localhost:3000/?ticket={safe_ticket_id}" target="_blank" style="display: inline-block; padding: 12px 28px; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; border-radius: 6px; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4);">
+                    <a href="{FRONTEND_URL}/?ticket={safe_ticket_id}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 12px 28px; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; border-radius: 6px; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4);">
                       View Ticket #{safe_ticket_id} Details →
+                    </a>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding-top: 14px; font-size: 13px; color: #94a3b8; line-height: 1.5;">
+                    Or open directly in browser:<br/>
+                    <a href="{FRONTEND_URL}/?ticket={safe_ticket_id}" target="_blank" rel="noopener noreferrer" style="color: #38bdf8; text-decoration: underline; font-weight: 500; word-break: break-all;">
+                      {FRONTEND_URL}/?ticket={safe_ticket_id}
                     </a>
                   </td>
                 </tr>
@@ -482,7 +499,7 @@ def build_comment_notification_text(
         f"Comment:\n"
         f"--------\n"
         f"{comment_content}\n\n"
-        f"View ticket online: http://localhost:3000/?ticket={ticket_id}\n"
+        f"View ticket online: {FRONTEND_URL}/?ticket={ticket_id}\n"
     )
 
 

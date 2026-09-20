@@ -33,6 +33,7 @@ services:
       SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@ticketworkspace.com}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-flash-latest}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
     volumes:
       - ./backend:/app
       - ./.env:/app/.env
@@ -62,6 +63,12 @@ services:
     image: maildev/maildev:latest
     container_name: ticket-maildev
     restart: unless-stopped
+    entrypoint:
+      - sh
+      - -c
+      - |
+        sed -i 's/sandbox:"[^"]*"/sandbox:"allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation"/g' node_modules/@maildev/ui/dist/assets/index-*.js
+        exec node dist/bin/maildev.js
     ports:
       - "${SMTP_PORT:-1025}:1025"
       - "${MAILDEV_WEB_PORT:-1080}:1080"
