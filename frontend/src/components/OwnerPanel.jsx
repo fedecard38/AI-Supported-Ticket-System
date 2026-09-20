@@ -75,6 +75,13 @@ export function OwnerPanel({
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [resetting, setResetting] = useState(false);
 
+  // Gemini API Key management state
+  const [geminiApiKey, setGeminiApiKey] = useState('');
+  const [apiKeyPassword, setApiKeyPassword] = useState('');
+  const [savingKey, setSavingKey] = useState(false);
+  const [keySuccess, setKeySuccess] = useState(false);
+  const [keyError, setKeyError] = useState(null);
+
   const fetchUsers = async () => {
     setLoading(true);
     setError(null);
@@ -227,6 +234,33 @@ export function OwnerPanel({
       setError(err.message || 'Factory reset authorization failed.');
     } finally {
       setResetting(false);
+    }
+  };
+
+  // Handle Update Gemini Key
+  const handleUpdateGeminiKey = async (e) => {
+    e.preventDefault();
+    if (!geminiApiKey.trim() || !apiKeyPassword) {
+      setKeyError('Please provide both the new Gemini API Key and your Owner password.');
+      return;
+    }
+    setSavingKey(true);
+    setKeyError(null);
+    setKeySuccess(false);
+    try {
+      await api.updateGeminiKey({
+        owner_password: apiKeyPassword,
+        gemini_api_key: geminiApiKey.trim(),
+        validate_external: false,
+      });
+      setKeySuccess(true);
+      setGeminiApiKey('');
+      setApiKeyPassword('');
+      showToast?.('Gemini API Key updated successfully! AI Triage is now active.', 'success');
+    } catch (err) {
+      setKeyError(err.message || 'Failed to update Gemini API key.');
+    } finally {
+      setSavingKey(false);
     }
   };
 
@@ -444,7 +478,77 @@ export function OwnerPanel({
         )}
       </div>
 
-      {/* Section 2: Danger Zone - Factory Reset */}
+      {/* Section 2: AI Configuration - Google Gemini API Key */}
+      <div className="p-6 rounded-2xl bg-gradient-to-br from-indigo-950/20 via-slate-900 to-slate-900 border border-indigo-500/30 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+            <KeyRound className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-white">AI Engine: Google Gemini API Key</h2>
+            <p className="text-xs text-indigo-300/80">
+              Configure or update the Gemini API key used for automatic ticket categorization, prioritization, and intelligent summarization.
+            </p>
+          </div>
+        </div>
+
+        {keySuccess && (
+          <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span>Gemini API Key saved and active!</span>
+          </div>
+        )}
+
+        {keyError && (
+          <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-rose-400" />
+            <span>{keyError}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleUpdateGeminiKey} className="space-y-4 max-w-xl">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-300 mb-1">
+                New Gemini API Key *
+              </label>
+              <input
+                type="password"
+                required
+                value={geminiApiKey}
+                onChange={(e) => setGeminiApiKey(e.target.value)}
+                placeholder="AIzaSy..."
+                className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-300 mb-1">
+                Owner Master Password *
+              </label>
+              <input
+                type="password"
+                required
+                value={apiKeyPassword}
+                onChange={(e) => setApiKeyPassword(e.target.value)}
+                placeholder="Owner password..."
+                className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={savingKey || !geminiApiKey.trim() || !apiKeyPassword}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20 transition-all hover:scale-[1.01] disabled:opacity-50"
+          >
+            {savingKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <KeyRound className="w-3.5 h-3.5" />}
+            <span>Update Gemini Key</span>
+          </button>
+        </form>
+      </div>
+
+      {/* Section 3: Danger Zone - Factory Reset */}
       <div className="p-6 rounded-2xl bg-gradient-to-br from-rose-950/20 via-slate-900 to-slate-900 border border-rose-500/30 space-y-4">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20">

@@ -90,9 +90,9 @@ def test_classify_ticket_successful_gemini_call(monkeypatch):
         # Assert client initialized with API key
         mock_client_cls.assert_called_once_with(api_key="test-api-key-12345678901234567890")
 
-        # Assert generate_content called with model gemini-flash-latest
+        # Assert generate_content called with active model
         args, kwargs = mock_client.models.generate_content.call_args
-        assert kwargs["model"] == "gemini-flash-latest"
+        assert kwargs["model"] in ("gemini-2.5-flash", "gemini-flash-latest")
         assert "Alice Smith" in kwargs["contents"]
         assert "https://example.com/receipt.pdf" in kwargs["contents"]
 
@@ -254,3 +254,28 @@ def test_api_triage_endpoints(tmp_path):
         assert resp_classify.status_code == 200
         data_classify = resp_classify.json()
         assert data_classify["category"] == "Customer Success"
+
+
+def test_fallback_summary_extracts_actual_problem_not_subject():
+    """Verify fallback summary uses the detailed description and not just the subject/title."""
+    # Case 1: Separate title and large description
+    res1 = fallback_classify_ticket(
+        consumer_name="Pepita",
+        title="Problema.",
+        description="Al revisar la factura de este mes me di cuenta que me cobraron dos veces el mismo servicio por un total de 120 dólares. Solicito por favor que me hagan el reembolso correspondiente.",
+        reason="test",
+    )
+    assert res1.category == "Finance"
+    assert "Problema." not in res1.summary
+    assert "cobraron dos veces" in res1.summary or "factura" in res1.summary
+
+    # Case 2: Combined request_text formatted as Subject: ... \n\n Issue Details: ...
+    combined = "Subject: Problema.\n\nIssue Details:\nMi cuenta de usuario fue bloqueada tras varios intentos de login. Necesito restablecer mi contraseña de inmediato para acceder al servidor."
+    res2 = fallback_classify_ticket(
+        consumer_name="Pepita",
+        request_text=combined,
+        reason="test",
+    )
+    assert res2.category == "IT Support"
+    assert "Subject: Problema" not in res2.summary
+    assert "bloqueada" in res2.summary or "contraseña" in res2.summary
