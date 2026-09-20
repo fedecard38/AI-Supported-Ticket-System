@@ -228,3 +228,20 @@ def test_pydantic_schema_validation_and_serialization(db_session):
     assert ticket_read.priority == TicketPriority.LOW
     assert ticket_read.status == TicketStatus.OPEN
     assert ticket_read.created_at == ticket.created_at
+
+
+def test_ticket_update_and_user_update_schemas():
+    """Verify TicketUpdate and UserUpdate schema serialization."""
+    from app.schemas.ticket import TicketUpdate
+    from app.schemas.user import UserUpdate
+
+    # Test TicketUpdate with partial fields
+    t_update = TicketUpdate(status=TicketStatus.IN_PROGRESS, priority=TicketPriority.HIGH)
+    dumped = t_update.model_dump(exclude_unset=True)
+    assert dumped == {"status": TicketStatus.IN_PROGRESS, "priority": TicketPriority.HIGH}
+
+    # Test UserUpdate
+    u_update = UserUpdate(assigned_category="Finance", is_active=True)
+    u_dumped = u_update.model_dump(exclude_unset=True)
+    assert u_dumped == {"assigned_category": "Finance", "is_active": True}
+
